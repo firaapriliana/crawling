@@ -13,4 +13,3 @@ Sastrawi
 scikit-learn
 tensorflow
 keras
-youtube_crawling
