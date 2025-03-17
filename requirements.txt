@@ -9,3 +9,4 @@ matplotlib
 nltk
 requests
 sastrawi
+sklearn
