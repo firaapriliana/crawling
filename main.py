@@ -27,6 +27,7 @@ crawler = YoutubeCrawling(YOUTUBE_API_KEY)
 # Inisialisasi Stemmer dan Stopwords
 nltk.download('stopwords')
 nltk.download('punkt')
+nltk.download('punkt_tab')
 stop_words = set(stopwords.words('indonesian'))
 stemmer = StemmerFactory().create_stemmer()
 
