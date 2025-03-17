@@ -10,3 +10,5 @@ nltk
 requests
 sastrawi
 sklearn
+tensorflow
+keras
