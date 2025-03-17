@@ -1,21 +1,51 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
+import re
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
+from sklearn.feature_extraction.text import TfidfVectorizer
+from tensorflow.keras.preprocessing.text import Tokenizer
+from keras.preprocessing.sequence import pad_sequences
+from keras.models import Sequential
+from keras.layers import Embedding, LSTM, Dense
 
 from youtube_crawling import YoutubeCrawling
-from comment_preprocessing import CommentPreprocessing
-from sentiment_analysis import IndoBertSentiment
 
 # Konfigurasi API YouTube
 YOUTUBE_API_KEY = "AIzaSyCwGg_Quc1Ie99GeTvaoF_BHpqWcj0sdDc"
 
 # Inisialisasi objek
 crawler = YoutubeCrawling(YOUTUBE_API_KEY)
-preprocessor = CommentPreprocessing()
-sentiment_analyzer = IndoBertSentiment()
+
+# Inisialisasi Stemmer dan Stopwords
+nltk.download('stopwords')
+nltk.download('punkt')
+stop_words = set(stopwords.words('indonesian'))
+stemmer = StemmerFactory().create_stemmer()
+
+# Fungsi pre-processing
+def preprocess_text(text):
+    text = re.sub(r'[^a-zA-Z ]', '', text.lower())  # Hapus karakter non-alfabet
+    tokens = word_tokenize(text)
+    tokens = [word for word in tokens if word not in stop_words]  # Hapus stopwords
+    tokens = [stemmer.stem(word) for word in tokens]  # Stemming
+    return ' '.join(tokens)
+
+# Load Model LSTM
+model = Sequential([
+    Embedding(input_dim=5000, output_dim=128, input_length=200),
+    LSTM(100, return_sequences=False),
+    Dense(3, activation='softmax')
+])
+model.compile(loss='categorical_crossentropy', optimizer=Adam(learning_rate=0.001), metrics=['accuracy'])
 
 # Streamlit UI
-st.title("Analisis Sentimen Komentar YouTube dengan IndoBERT")
+st.title("Analisis Sentimen Komentar YouTube dengan LSTM")
 st.write("Masukkan link video YouTube dan jumlah komentar yang ingin dianalisis.")
 
 # Input pengguna
@@ -38,29 +68,32 @@ if st.button("Analisis Sentimen"):
             st.success(f"Ditemukan {len(comments)} komentar. Memproses sentimen...")
 
             # Cleansing data
-            cleaned_comments = [preprocessor.clean_text(comment) for comment in comments]
+            cleaned_comments = [preprocess_text(comment) for comment in comments]
 
-            # Analisis sentimen
-            results = [{"Komentar": comment, "Sentimen": sentiment_analyzer.predict(comment)} for comment in cleaned_comments]
-            df = pd.DataFrame(results)
+            # TF-IDF
+            vectorizer = TfidfVectorizer(max_features=5000)
+            X_tfidf = vectorizer.fit_transform(cleaned_comments).toarray()
+            X_padded = pad_sequences(X_tfidf, maxlen=200)
+
+            # Prediksi sentimen
+            predictions = model.predict(X_padded)
+            sentiment_labels = ['Negatif', 'Netral', 'Positif']
+            predicted_sentiments = [sentiment_labels[np.argmax(pred)] for pred in predictions]
+
+            df = pd.DataFrame({"Komentar": comments, "Sentimen": predicted_sentiments})
 
             # Menampilkan hasil
             st.write("### Hasil Analisis Sentimen")
             st.dataframe(df)
 
-            # Visualisasi hasil
+            # Visualisasi hasil dengan Seaborn
             sentiment_counts = df["Sentimen"].value_counts()
-            fig, ax = plt.subplots()
-            colors = {
-                "Positif": "green",
-                "Netral": "gray",
-                "Negatif": "red"
-            }
-            ax.bar(sentiment_counts.index, sentiment_counts.values, color=[colors[label] for label in sentiment_counts.index])
-            ax.set_title("Distribusi Sentimen")
-            ax.set_xlabel("Sentimen")
-            ax.set_ylabel("Jumlah Komentar")
-            st.pyplot(fig)
+            plt.figure(figsize=(6,4))
+            sns.barplot(x=sentiment_counts.index, y=sentiment_counts.values, palette=["red", "gray", "green"])
+            plt.title("Distribusi Sentimen")
+            plt.xlabel("Sentimen")
+            plt.ylabel("Jumlah Komentar")
+            st.pyplot(plt)
 
             # Download hasil sebagai CSV
             csv = df.to_csv(index=False).encode("utf-8")
