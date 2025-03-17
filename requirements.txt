@@ -9,7 +9,6 @@ matplotlib
 nltk
 requests
 numpy
-nltk
 Sastrawi
 scikit-learn
 tensorflow
