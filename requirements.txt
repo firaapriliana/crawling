@@ -1,0 +1,10 @@
+streamlit
+google-api-python-client
+transformers
+torch
+pandas
+WordCloud
+seaborn
+matplotlib
+nltk
+requests
