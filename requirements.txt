@@ -8,6 +8,10 @@ seaborn
 matplotlib
 nltk
 requests
-sastrawi
-sklearn
+numpy
+nltk
+Sastrawi
+scikit-learn
 tensorflow
+keras
+youtube_crawling
