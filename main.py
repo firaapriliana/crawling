@@ -7,9 +7,15 @@ import re
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
+from youtube_crawling import YoutubeCrawling
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
-from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
-import tensorflow as tf
+from sklearn.feature_extraction.text import TfidfVectorizer
+from tensorflow.keras.preprocessing.text import Tokenizer
+from keras.preprocessing.sequence import pad_sequences
+from keras.models import Sequential
+from keras.layers import Embedding, LSTM, Dense
+from tensorflow.keras.optimizers import Adam
+
 from youtube_crawling import YoutubeCrawling
 
 # Konfigurasi API YouTube
@@ -21,23 +27,28 @@ crawler = YoutubeCrawling(YOUTUBE_API_KEY)
 # Inisialisasi Stemmer dan Stopwords
 nltk.download('stopwords')
 nltk.download('punkt')
+nltk.download('punkt_tab')
 stop_words = set(stopwords.words('indonesian'))
 stemmer = StemmerFactory().create_stemmer()
 
-# Load IndoBERT model dan tokenizer
-tokenizer = AutoTokenizer.from_pretrained("indobenchmark/indobert-base-p1")
-model = TFAutoModelForSequenceClassification.from_pretrained("indobenchmark/indobert-base-p1", num_labels=3)
-
 # Fungsi pre-processing
 def preprocess_text(text):
-    text = re.sub(r'[^a-zA-Z ]', ' ', text.lower())  # Hapus karakter non-alfabet
+    text = re.sub(r'[^a-zA-Z ]', '', text.lower())  # Hapus karakter non-alfabet
     tokens = word_tokenize(text)
     tokens = [word for word in tokens if word not in stop_words]  # Hapus stopwords
     tokens = [stemmer.stem(word) for word in tokens]  # Stemming
     return ' '.join(tokens)
 
+# Load Model LSTM
+model = Sequential([
+    Embedding(input_dim=5000, output_dim=128, input_length=200),
+    LSTM(100, return_sequences=False),
+    Dense(3, activation='softmax')
+])
+model.compile(loss='categorical_crossentropy', optimizer=Adam(learning_rate=0.001), metrics=['accuracy'])
+
 # Streamlit UI
-st.title("🧠 Analisis Sentimen Komentar YouTube dengan IndoBERT")
+st.title("Analisis Sentimen Komentar YouTube dengan LSTM")
 st.write("Masukkan link video YouTube dan jumlah komentar yang ingin dianalisis.")
 
 # Input pengguna
@@ -59,25 +70,26 @@ if st.button("Analisis Sentimen"):
 
             st.success(f"Ditemukan {len(comments)} komentar. Memproses sentimen...")
 
-            # Preprocessing
+            # Cleansing data
             cleaned_comments = [preprocess_text(comment) for comment in comments]
 
-            # Tokenisasi dan prediksi
-            inputs = tokenizer(cleaned_comments, padding=True, truncation=True, return_tensors="tf")
-            outputs = model(inputs)
-            predictions = tf.nn.softmax(outputs.logits, axis=1).numpy()
+            # TF-IDF
+            vectorizer = TfidfVectorizer(max_features=5000)
+            X_tfidf = vectorizer.fit_transform(cleaned_comments).toarray()
+            X_padded = pad_sequences(X_tfidf, maxlen=200)
 
-            # Interpretasi hasil
+            # Prediksi sentimen
+            predictions = model.predict(X_padded)
             sentiment_labels = ['Negatif', 'Netral', 'Positif']
             predicted_sentiments = [sentiment_labels[np.argmax(pred)] for pred in predictions]
 
             df = pd.DataFrame({"Komentar": comments, "Sentimen": predicted_sentiments})
 
-            # Tampilkan hasil
+            # Menampilkan hasil
             st.write("### Hasil Analisis Sentimen")
             st.dataframe(df)
 
-            # Visualisasi hasil
+            # Visualisasi hasil dengan Seaborn
             sentiment_counts = df["Sentimen"].value_counts()
             plt.figure(figsize=(6,4))
             sns.barplot(x=sentiment_counts.index, y=sentiment_counts.values, palette=["red", "gray", "green"])
@@ -86,7 +98,7 @@ if st.button("Analisis Sentimen"):
             plt.ylabel("Jumlah Komentar")
             st.pyplot(plt)
 
-            # Unduh hasil
+            # Download hasil sebagai CSV
             csv = df.to_csv(index=False).encode("utf-8")
             st.download_button(label="📥 Download CSV", data=csv, file_name="sentimen_youtube.csv", mime="text/csv")
 
