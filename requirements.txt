@@ -13,3 +13,4 @@ Sastrawi
 scikit-learn
 tensorflow
 keras
+transformers
